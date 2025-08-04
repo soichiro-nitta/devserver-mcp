@@ -1,0 +1,26 @@
+{
+  "services": [
+    {
+      "label": "next",
+      "command": "pnpm dev",
+      "port": 3000
+    },
+    {
+      "label": "convex",
+      "command": "npx convex dev",
+      "cloudPort": 3210,
+      "sitePort": 6810
+    },
+    {
+      "label": "api",
+      "command": "npm run dev",
+      "port": 8080,
+      "healthEndpoint": "/health"
+    }
+  ],
+  "aliases": {
+    "web": "next",
+    "backend": "convex",
+    "server": "api"
+  }
+}
