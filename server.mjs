@@ -614,7 +614,8 @@ class DevServerMCP {
         cwd,
         shell: true,
         env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true  // プロセスグループのリーダーにする
       })
 
       // ログバッファを初期化
@@ -730,7 +731,7 @@ class DevServerMCP {
     }
   }
 
-  stop(args) {
+  async stop(args) {
     const { label } = args
     const proc = this.findProcess(label)
 
@@ -747,13 +748,40 @@ class DevServerMCP {
     // 自動再起動を無効化
     proc.autoRestart = false
 
-    // SIGTERMを送信してグレースフルシャットダウン
-    proc.process.kill('SIGTERM')
+    // Convex固有の処理
+    if (proc.command.includes('convex')) {
+      try {
+        // convex-local-backendプロセスも停止
+        const { exec } = await import('node:child_process')
+        await new Promise((resolve) => {
+          exec('pkill -f convex-local-backend', (error) => {
+            // エラーは無視（プロセスが存在しない場合もあるため）
+            resolve()
+          })
+        })
+      } catch (error) {
+        // エラーログ（デバッグ用）
+        console.error('Convex cleanup error:', error)
+      }
+    }
+
+    // プロセスグループ全体にSIGTERMを送信
+    try {
+      // 負のPIDを使用してプロセスグループ全体にシグナルを送信
+      process.kill(-proc.process.pid, 'SIGTERM')
+    } catch (error) {
+      // プロセスグループが存在しない場合は通常の方法で終了
+      proc.process.kill('SIGTERM')
+    }
     
     // 強制終了用のタイマー（5秒後）
     setTimeout(() => {
       if (procs.has(actualLabel)) {
-        proc.process.kill('SIGKILL')
+        try {
+          process.kill(-proc.process.pid, 'SIGKILL')
+        } catch (error) {
+          proc.process.kill('SIGKILL')
+        }
         procs.delete(actualLabel)
       }
     }, 5000)
