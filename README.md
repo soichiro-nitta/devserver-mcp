@@ -368,6 +368,44 @@ export DEVSERVER_TOKEN=your-secret-token
 /mcp__devserver__start {"label":"next","auth":"your-secret-token"}
 ```
 
+## Claude Commands
+
+このリポジトリには、DevServer MCPを簡単に使用するためのClaude Commandsが含まれています。
+
+### Claude Commands の設定方法
+
+```bash
+# グローバルコマンドディレクトリにコピー
+cp -r claude-commands/*.md ~/.claude/commands/
+
+# または、プロジェクト固有で使用する場合
+cp -r claude-commands/*.md /path/to/your/project/.claude/commands/
+```
+
+### 利用可能なコマンド
+
+1. **devserver** - DevServer MCPの基本的な使い方とトラブルシューティング
+2. **dev-start** - 開発サーバーを起動
+3. **dev-stop** - 開発サーバーを停止
+4. **dev-logs** - 開発サーバーのログを表示
+5. **dev-restart** - 開発サーバーを再起動
+
+Claude Codeで以下のようにコマンドを実行できます：
+```
+/project:dev-start
+/project:dev-logs
+/project:dev-stop
+```
+
+### サンプル設定ファイル
+
+`examples/`ディレクトリには、様々なプロジェクトタイプ用の`.devserver.json`のサンプルが含まれています：
+
+```bash
+# プロジェクトにコピーして使用
+cp examples/.devserver.json /path/to/your/project/
+```
+
 ## 確認手順
 
 1. 新しいターミナルを開いて確認：
