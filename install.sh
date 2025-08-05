@@ -182,6 +182,44 @@ else
     echo "claude mcp add devserver \"node ${INSTALL_DIR}/server.mjs\" -s user"
 fi
 
+# Claude Commandsのインストール
+echo -e "\n📝 Claude Commands のインストール..."
+if command -v claude &> /dev/null; then
+    echo -e "${YELLOW}便利なスラッシュコマンドをインストールしますか？ (y/N)${NC}"
+    echo "  含まれるコマンド:"
+    echo "  - /project:devserver    (総合管理)"
+    echo "  - /project:dev-start    (起動)"
+    echo "  - /project:dev-stop     (停止)"
+    echo "  - /project:dev-logs     (ログ表示)"
+    echo "  - /project:dev-restart  (再起動)"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        # グローバルコマンドディレクトリを作成
+        mkdir -p "${HOME}/.claude/commands"
+        
+        # claude-commandsディレクトリをダウンロード
+        COMMANDS_DIR="${INSTALL_DIR}/claude-commands"
+        mkdir -p "${COMMANDS_DIR}"
+        
+        # 各コマンドファイルをダウンロード（ローカル開発時はコピー）
+        if [ -d "/Users/soichiro/Work/devserver-mcp/claude-commands" ]; then
+            cp -r /Users/soichiro/Work/devserver-mcp/claude-commands/*.md "${COMMANDS_DIR}/"
+        else
+            # 本番環境では各ファイルをダウンロード
+            for cmd in devserver dev-start dev-stop dev-logs dev-restart; do
+                curl -sSL "https://raw.githubusercontent.com/yourusername/devserver-mcp/main/claude-commands/${cmd}.md" \
+                     -o "${COMMANDS_DIR}/${cmd}.md"
+            done
+        fi
+        
+        # グローバルコマンドディレクトリにコピー
+        cp -r "${COMMANDS_DIR}"/*.md "${HOME}/.claude/commands/"
+        
+        echo -e "${GREEN}✅ Claude Commands をインストールしました${NC}"
+        echo "   Claude Code で /project:devserver と入力して使い方を確認できます"
+    fi
+fi
+
 # サンプル設定ファイルの作成
 echo -e "\n📄 サンプル設定ファイルを作成中..."
 cat > "${HOME}/.devserver.json.example" << 'EOF'

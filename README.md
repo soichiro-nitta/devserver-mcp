@@ -33,6 +33,14 @@ curl -sSL https://raw.githubusercontent.com/yourusername/devserver-mcp/main/inst
 bash /Users/soichiro/Work/devserver-mcp/install.sh
 ```
 
+ワンライナーインストールでは以下が自動的に行われます：
+- DevServer MCPのグローバルインストール（`~/.devserver-mcp/`）
+- 依存関係のインストール
+- Claude MCPへの登録（オプション）
+- **Claude Commandsのインストール**（オプション）
+- systemd/LaunchAgentの設定（オプション）
+- サンプル設定ファイルの作成
+
 ### 手動インストール
 
 ```bash
@@ -384,18 +392,56 @@ cp -r claude-commands/*.md /path/to/your/project/.claude/commands/
 
 ### 利用可能なコマンド
 
-1. **devserver** - DevServer MCPの基本的な使い方とトラブルシューティング
-2. **dev-start** - 開発サーバーを起動
-3. **dev-stop** - 開発サーバーを停止
-4. **dev-logs** - 開発サーバーのログを表示
-5. **dev-restart** - 開発サーバーを再起動
+#### 1. **devserver** - DevServer MCPの総合管理
+- MCPの接続状態確認
+- プロジェクトの.devserver.json確認
+- グループ操作での一括起動/停止
+- トラブルシューティング手順
+
+#### 2. **dev-start** - 開発サーバーを起動
+- 現在のディレクトリを自動検出
+- .devserver.jsonに基づく一括起動
+- グループ操作（groupStart）対応
+- 起動後のポート情報表示
+
+#### 3. **dev-stop** - 開発サーバーを停止
+- 起動中のプロセスを確認
+- グループ操作での一括停止
+- 個別サービスの停止も可能
+
+#### 4. **dev-logs** - 開発サーバーのログを表示
+- エイリアスによるサービス指定
+- 正規表現フィルタリング
+- カラー表示オプション
+- 表示行数の指定
+
+#### 5. **dev-restart** - 開発サーバーを再起動
+- 個別サービスの再起動
+- 全サービスの一括再起動
+- 再起動後の動作確認
+
+### 使用方法
 
 Claude Codeで以下のようにコマンドを実行できます：
-```
+
+```bash
+# プロジェクト全体の管理
+/project:devserver
+
+# 個別の操作
 /project:dev-start
 /project:dev-logs
 /project:dev-stop
+/project:dev-restart
 ```
+
+### コマンドの特徴
+
+- **自動検出**: 現在のディレクトリを自動的に認識
+- **エイリアス対応**: `web`、`backend`などの短縮名を使用可能
+- **グループ操作**: プロジェクト単位での一括制御
+- **詳細なログ**: フィルタリングやカラー表示に対応
+- **エラーハンドリング**: 接続エラー時の自動復旧手順を提供
 
 ### サンプル設定ファイル
 
