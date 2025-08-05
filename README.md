@@ -106,9 +106,9 @@ claude mcp add devserver "node $(pwd)/server.mjs" -s user
 ### 3. ログ確認
 
 ```json
-# 基本的なログ表示（エイリアスも使用可）
+# 基本的なログ表示
 /mcp__devserver__logs {"label":"next"}
-/mcp__devserver__logs {"label":"web"}    # エイリアス使用
+# 注意: エイリアスは現在サポートされていません
 
 # エラーのみ表示（正規表現フィルタ）
 /mcp__devserver__logs {"label":"next","grep":"ERROR|WARN"}
@@ -129,9 +129,9 @@ claude mcp add devserver "node $(pwd)/server.mjs" -s user
 /mcp__devserver__start {"label":"next"}
 /mcp__devserver__start {"command":"npm run dev","label":"backend"}
 
-# 停止（エイリアスも使用可）
+# 停止
 /mcp__devserver__stop {"label":"next"}
-/mcp__devserver__stop {"label":"web"}  # エイリアス使用
+# 注意: エイリアスは現在サポートされていません
 
 # 再起動（設定を保持）
 /mcp__devserver__restart {"label":"next"}
@@ -228,17 +228,28 @@ Convexの場合、`cloudPort`と`sitePort`を指定すると、自動的にコ�
 
 ### エイリアス（v3.0新機能）
 
-`.devserver.json`でエイリアスを定義し、短い名前でサービスにアクセスできます：
+**重要な注意**: エイリアス機能は現在、DevServer MCP内部でのみ使用されており、MCPツール自体では認識されません。将来的な機能として`.devserver.json`に定義は可能ですが、実際の操作では必ずサービスの実際のラベル名（"next"、"convex"など）を使用してください。
 
 ```json
 {
   "services": [...],
   "aliases": {
-    "web": "next",      // /mcp__devserver__stop {"label":"web"} で next を停止
-    "backend": "convex", 
-    "api": "server"
+    "web": "next",      // 将来的な機能：現在は使用不可
+    "backend": "convex", // 将来的な機能：現在は使用不可
+    "api": "server"     // 将来的な機能：現在は使用不可
   }
 }
+```
+
+**現在の正しい使い方**:
+```json
+// ✅ 正しい（実際のラベル名を使用）
+/mcp__devserver__stop {"label":"next"}
+/mcp__devserver__logs {"label":"convex"}
+
+// ❌ 間違い（エイリアスは認識されない）
+/mcp__devserver__stop {"label":"web"}
+/mcp__devserver__logs {"label":"backend"}
 ```
 
 ### ヘルスチェック（v3.0新機能）
@@ -363,10 +374,10 @@ Node.jsバージョンを切り替えた場合は、必ず`update-mcp-registrati
 ### 個別操作の例
 
 ```json
-# エイリアスを使った操作
-/mcp__devserver__logs {"label":"web"}       # next のログを表示
-/mcp__devserver__stop {"label":"backend"}   # convex を停止
-/mcp__devserver__restart {"label":"web"}    # next を再起動
+# 実際のラベル名を使った操作
+/mcp__devserver__logs {"label":"next"}      # next のログを表示
+/mcp__devserver__stop {"label":"convex"}    # convex を停止
+/mcp__devserver__restart {"label":"next"}   # next を再起動
 
 # カラー付きログ表示
 /mcp__devserver__logs {"label":"next","color":true}
@@ -795,13 +806,17 @@ A: 現在Windows環境は未サポートです。WSL（Windows Subsystem for Lin
 
 ## 更新履歴
 
+### v3.0.2 (2025-01)
+- 📝 エイリアス機能の制限事項を明記（MCPツールでは使用不可）
+- 📝 実際のラベル名を使用するよう例を修正
+
 ### v3.0.1 (2024-01)
 - 📝 重複起動防止の設定方法をドキュメントに追加
 - 📝 package.jsonとの連携に関する注意事項を明記
 
 ### v3.0.0 (2024-01)
 - ✨ グループ操作機能を追加（`groupStart`/`groupStop`）
-- ✨ エイリアス機能を追加
+- ✨ エイリアス機能を追加（内部使用のみ）
 - ✨ ヘルスチェック機能を実装
 - ✨ セキュリティ機能を強化（コマンドホワイトリスト、認証）
 - ✨ ログの永続化（JSON Lines形式）
