@@ -322,6 +322,21 @@ export DEVSERVER_TOKEN=your-secret-token
 - 形式: JSON Lines (`.jsonl`)
 - ファイル名: `{label}-{日付}.jsonl`
 
+## 動作環境
+
+### Node.jsバージョン要件
+- **最小要件**: Node.js v18以上
+- **推奨**: Node.js v20 LTS または v22 LTS
+- **注意**: Node.js v24以降では互換性の問題が発生する可能性があります
+
+### バージョン管理ツール対応
+- n
+- nvm
+- volta
+- fnm
+
+Node.jsバージョンを切り替えた場合は、必ず`update-mcp-registration.sh`を実行してClaude MCP登録を更新してください。
+
 ## 注意事項
 
 - コマンドホワイトリストにより、許可されたパターンのコマンドのみ実行可能です
@@ -375,6 +390,66 @@ export DEVSERVER_TOKEN=your-secret-token
 # 認証付きで起動（AUTH有効時）
 /mcp__devserver__start {"label":"next","auth":"your-secret-token"}
 ```
+
+## 重複起動防止の設定
+
+### 問題
+package.jsonで`npm-run-all`を使って複数サービスを一括起動する設定がある場合、DevServer MCPでサービスが重複起動される可能性があります。
+
+例:
+```json
+// package.json
+{
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:backend dev:frontend",
+    "dev:backend": "convex dev",
+    "dev:frontend": "next dev -p 3000"
+  }
+}
+```
+
+### 解決策
+個別起動用のスクリプトを追加して、DevServer MCPではそれらを使用します:
+
+```json
+// package.json
+{
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:backend dev:frontend",  // 従来の一括起動
+    "dev:backend": "convex dev",
+    "dev:frontend": "next dev -p 3000",
+    "dev:next": "next dev -p 3000",      // DevServer MCP用（個別起動）
+    "dev:convex": "convex dev"           // DevServer MCP用（個別起動）
+  }
+}
+```
+
+```json
+// .devserver.json
+{
+  "services": [
+    {
+      "label": "next",
+      "command": "pnpm dev:next",    // 個別起動コマンドを使用
+      "port": 3000
+    },
+    {
+      "label": "convex",
+      "command": "pnpm dev:convex",  // 個別起動コマンドを使用
+      "port": 3210
+    }
+  ],
+  "aliases": {
+    "web": "next",
+    "backend": "convex"
+  }
+}
+```
+
+これにより:
+- DevServer MCPで起動時は各サービスが独立して起動
+- 従来の`pnpm dev`での一括起動も維持
+- 重複起動やポート競合を防止
 
 ## Claude Commands
 
@@ -452,6 +527,68 @@ Claude Codeで以下のようにコマンドを実行できます：
 cp examples/.devserver.json /path/to/your/project/
 ```
 
+## トラブルシューティング
+
+### Claude Code で "Status: ✗ failed" エラーが出る場合
+
+#### 1. 互換性チェックの実行
+```bash
+./check-compatibility.sh
+```
+
+このスクリプトで以下を確認できます：
+- Node.jsバージョンと互換性
+- Claude MCP登録状態
+- DevServer MCPインストール状態
+- Node.jsバージョン管理ツールの検出
+
+#### 2. よくある原因と解決方法
+
+**Node.jsパスの問題**
+- 複数のNode.jsバージョンがインストールされている場合、Claude Codeから見えるパスが異なることがあります
+- 解決: `./update-mcp-registration.sh`を実行してパスを更新
+
+**Node.jsバージョンの問題**
+- Node.js v24以降では互換性問題が発生する可能性があります
+- 解決: Node.js v20 LTSまたはv22 LTSに切り替え
+
+**MCP登録の問題**
+- 古いパスで登録されている可能性があります
+- 解決: 
+  ```bash
+  claude mcp remove devserver
+  ./update-mcp-registration.sh
+  ```
+
+#### 3. 手動でのテスト
+```bash
+# DevServer MCPが単体で動作するか確認
+node ~/.devserver-mcp/server.mjs --stdio
+
+# 初期化メッセージを送信してテスト
+echo '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"1.0.0","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}},"id":1}' | node ~/.devserver-mcp/server.mjs --stdio
+```
+
+#### 4. ログの確認
+```bash
+# Claude MCPの詳細ログ
+claude mcp list --verbose
+
+# DevServer MCPのログ
+tail -f ~/.devserver-mcp/logs/stderr.log
+```
+
+### FAQ
+
+**Q: Node.jsバージョンを切り替えたらDevServer MCPが動かなくなった**
+A: `./update-mcp-registration.sh`を実行して、新しいNode.jsパスでMCP登録を更新してください。
+
+**Q: 「新しいClaude Codeセッションを開始してください」と表示される**
+A: MCPの設定変更は現在のセッションには反映されません。`exit`でセッションを終了し、`claude`で新しいセッションを開始してください。
+
+**Q: ポート6300が使用中と表示される**
+A: `lsof -i :6300`で使用中のプロセスを確認し、必要に応じて停止してください。
+
 ## 確認手順
 
 1. 新しいターミナルを開いて確認：
@@ -472,6 +609,181 @@ cp examples/.devserver.json /path/to/your/project/
    # ✅ test を起動しました と表示されれば成功
    ```
 
+## トラブルシューティング
+
+### Node.js互換性問題
+
+#### 症状：「❌ Connection failed」エラー
+```bash
+claude mcp list
+# devserver: /path/to/old/node /Users/username/.devserver-mcp/server.mjs - ❌ Connection failed
+```
+
+#### 原因
+Node.jsバージョン管理ツール（n、nvm、volta等）でバージョンを切り替えた後、古いパスで登録されている
+
+#### 解決策
+```bash
+# 1. 現在のNode.jsパスを確認
+which node
+
+# 2. Claude MCP登録を更新
+claude mcp remove devserver
+claude mcp add devserver "$(which node) ~/.devserver-mcp/server.mjs" -s user
+
+# 3. 接続確認
+claude mcp list
+```
+
+### Node.jsバージョン要件
+
+#### サポートされるバージョン
+- **最小要件**: Node.js v18.0.0以上
+- **推奨**: Node.js v20.0.0以上
+- **最新対応**: Node.js v24.x
+
+#### バージョン確認
+```bash
+node -v  # v18.0.0以上であることを確認
+```
+
+#### アップグレード方法
+
+**n（Node.js）使用時：**
+```bash
+sudo n latest
+# または特定バージョン
+sudo n 20
+```
+
+**nvm使用時：**
+```bash
+nvm install 20
+nvm use 20
+nvm alias default 20
+```
+
+**volta使用時：**
+```bash
+volta install node@20
+```
+
+### インストール失敗時の対処
+
+#### 権限エラー
+```bash
+# macOSでLaunchAgent作成失敗時
+chmod 755 ~/Library/LaunchAgents/
+sudo chown $(whoami) ~/Library/LaunchAgents/
+
+# Linuxでsystemd作成失敗時
+mkdir -p ~/.config/systemd/user
+systemctl --user daemon-reload
+```
+
+#### 依存関係インストール失敗
+```bash
+# npm cacheをクリア
+npm cache clean --force
+
+# 手動で依存関係をインストール
+cd ~/.devserver-mcp
+npm install @modelcontextprotocol/sdk@latest strip-ansi@^7.1.0
+```
+
+#### パス関連エラー
+```bash
+# シェル設定を再読み込み
+source ~/.bashrc  # または ~/.zshrc
+
+# PATH環境変数を確認
+echo $PATH | grep node
+```
+
+### Claude MCPとの接続問題
+
+#### デバッグログの確認
+```bash
+# MCPサーバーを直接実行してエラーを確認
+cd ~/.devserver-mcp
+node server.mjs
+# Ctrl+Cで終了
+
+# ログファイルを確認
+cat ~/.devserver-mcp/logs/stderr.log
+```
+
+#### ポート競合の確認
+```bash
+# ポート使用状況を確認
+lsof -i :3000  # 開発サーバーのポート
+netstat -an | grep LISTEN
+```
+
+#### 手動再インストール
+```bash
+# 完全に削除してからインストール
+rm -rf ~/.devserver-mcp
+claude mcp remove devserver
+
+# 再インストール
+bash /path/to/install.sh
+```
+
+### 設定ファイル関連の問題
+
+#### .devserver.jsonの検証
+```bash
+# JSONの構文チェック
+cat .devserver.json | python -m json.tool
+# またはNode.jsで
+node -e "console.log(JSON.parse(require('fs').readFileSync('.devserver.json', 'utf8')))"
+```
+
+#### サンプル設定のコピー
+```bash
+# サンプル設定をコピー
+cp ~/.devserver.json.example .devserver.json
+```
+
+### パフォーマンス問題
+
+#### メモリ使用量の確認
+```bash
+# プロセス確認
+ps aux | grep devserver
+
+# メモリ使用量確認
+top -p $(pgrep -f devserver)
+```
+
+#### ログサイズの管理
+```bash
+# ログディレクトリサイズ確認
+du -sh ~/.devserver-mcp/logs/
+
+# 古いログを削除
+find ~/.devserver-mcp/logs/ -name "*.jsonl" -mtime +7 -delete
+```
+
+### よくある質問（FAQ）
+
+#### Q: Node.jsバージョンを切り替えたら接続できなくなった
+A: Claude MCP登録のパスが古いNode.jsを指しています。上記の「Node.js互換性問題」を参照して登録を更新してください。
+
+#### Q: エラーメッセージに「permission denied」が表示される
+A: インストールディレクトリまたは実行ファイルの権限を確認してください：
+```bash
+chmod +x ~/.devserver-mcp/server.mjs
+chmod 755 ~/.devserver-mcp
+```
+
+#### Q: プロセスが自動再起動しない
+A: セキュリティ機能により、許可されていないコマンドは実行されません。`package.json`のスクリプトまたは許可されたパターンを使用してください。
+
+#### Q: Windows環境での動作について
+A: 現在Windows環境は未サポートです。WSL（Windows Subsystem for Linux）での使用を推奨します。
+
 ## プロジェクト命名規則
 
 グループ操作を使用する場合、プロセスは以下の形式で管理されます：
@@ -482,6 +794,10 @@ cp examples/.devserver.json /path/to/your/project/
 プロジェクト名は作業ディレクトリ名から自動的に取得されます。
 
 ## 更新履歴
+
+### v3.0.1 (2024-01)
+- 📝 重複起動防止の設定方法をドキュメントに追加
+- 📝 package.jsonとの連携に関する注意事項を明記
 
 ### v3.0.0 (2024-01)
 - ✨ グループ操作機能を追加（`groupStart`/`groupStop`）

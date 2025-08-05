@@ -4,14 +4,21 @@
   "description": "MCP server for managing development servers",
   "main": "server.mjs",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "check-compatibility": "./check-compatibility.sh",
+    "update-mcp": "./update-mcp-registration.sh"
   },
   "keywords": [
     "mcp",
     "development",
-    "server"
+    "server",
+    "claude",
+    "nodejs"
   ],
   "author": "",
   "license": "ISC",

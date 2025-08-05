@@ -23,10 +23,50 @@ case "${OS}" in
     *)          echo -e "${RED}サポートされていないOS: ${OS}${NC}"; exit 1;;
 esac
 
+# Node.jsのバージョンと互換性チェック
+NODE_VERSION=$(node -v 2>/dev/null || echo "")
+if [ -z "$NODE_VERSION" ]; then
+    echo -e "${RED}❌ Node.jsがインストールされていません${NC}"
+    exit 1
+fi
+
+NODE_MAJOR_VERSION=$(echo "$NODE_VERSION" | sed 's/v\([0-9]*\).*/\1/')
+if [ "$NODE_MAJOR_VERSION" -lt 18 ]; then
+    echo -e "${RED}❌ Node.js v18以上が必要です（現在: $NODE_VERSION）${NC}"
+    echo "    推奨: Node.js v20 LTS または v22 LTS"
+    exit 1
+fi
+
+# Node.jsの実行パスを動的に検出
+NODE_PATH=$(which node)
+if [ -z "$NODE_PATH" ]; then
+    echo -e "${RED}❌ Node.jsの実行パスが見つかりません${NC}"
+    exit 1
+fi
+
+# Node.jsの実際のパスを解決（シンボリックリンクの場合）
+NODE_REAL_PATH=$(readlink -f "$NODE_PATH" 2>/dev/null || realpath "$NODE_PATH" 2>/dev/null || echo "$NODE_PATH")
+
 echo "📋 環境情報:"
 echo "  - OS: ${OS_TYPE}"
-echo "  - Node.js: $(node -v)"
+echo "  - Node.js: $NODE_VERSION (パス: $NODE_PATH)"
 echo "  - npm: $(npm -v)"
+
+# Node.jsバージョン管理ツールの検出
+NODE_MANAGER=""
+if [ -n "${N_PREFIX:-}" ]; then
+    NODE_MANAGER="n"
+elif [ -n "${NVM_DIR:-}" ]; then
+    NODE_MANAGER="nvm"
+elif command -v volta &> /dev/null; then
+    NODE_MANAGER="volta"
+fi
+
+if [ -n "$NODE_MANAGER" ]; then
+    echo "  - Node.js管理: $NODE_MANAGER"
+    echo -e "${YELLOW}⚠️  Node.jsバージョン管理ツールが検出されました${NC}"
+    echo "     バージョン切り替え時はClaude MCP登録の更新が必要です"
+fi
 
 # インストール先の決定
 INSTALL_DIR="${HOME}/.devserver-mcp"
@@ -82,6 +122,22 @@ npm install --quiet
 # 実行権限の付与
 chmod +x server.mjs
 
+# 便利スクリプトをダウンロード・コピー
+echo -e "\n🔧 便利スクリプトをインストール中..."
+mkdir -p scripts
+
+if [ -d "/Users/soichiro/Work/devserver-mcp/scripts" ]; then
+    # ローカル開発時はコピー
+    cp /Users/soichiro/Work/devserver-mcp/scripts/*.sh scripts/
+else
+    # 本番環境ではGitHubから取得
+    curl -sSL https://raw.githubusercontent.com/yourusername/devserver-mcp/main/scripts/check-compatibility.sh -o scripts/check-compatibility.sh
+    curl -sSL https://raw.githubusercontent.com/yourusername/devserver-mcp/main/scripts/update-mcp-registration.sh -o scripts/update-mcp-registration.sh
+fi
+
+# 実行権限を付与
+chmod +x scripts/*.sh
+
 # サービス登録
 if [ "${OS_TYPE}" = "Mac" ]; then
     echo -e "\n🔧 LaunchAgent を設定中..."
@@ -97,7 +153,7 @@ if [ "${OS_TYPE}" = "Mac" ]; then
     <string>com.devserver.mcp</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/node</string>
+        <string>${NODE_PATH}</string>
         <string>${INSTALL_DIR}/server.mjs</string>
     </array>
     <key>WorkingDirectory</key>
@@ -142,7 +198,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node ${INSTALL_DIR}/server.mjs
+ExecStart=${NODE_PATH} ${INSTALL_DIR}/server.mjs
 WorkingDirectory=${INSTALL_DIR}
 Restart=on-failure
 RestartSec=10
@@ -170,16 +226,33 @@ fi
 # Claude MCPへの登録
 echo -e "\n🔗 Claude MCP への登録..."
 if command -v claude &> /dev/null; then
+    # 既存の登録を削除
+    claude mcp remove devserver &> /dev/null || true
+    
     echo -e "${YELLOW}Claude MCP に登録しますか？ (y/N)${NC}"
     read -r response
     if [[ "$response" =~ ^[Yy]$ ]]; then
-        claude mcp add devserver "node ${INSTALL_DIR}/server.mjs" -s user
+        # 既存の登録を削除（エラーは無視）
+        claude mcp remove devserver 2>/dev/null || true
+        
+        # フルパスとenv設定で登録
+        claude mcp add-json devserver "{
+  \"type\": \"stdio\",
+  \"command\": \"${NODE_REAL_PATH}\",
+  \"args\": [\"${INSTALL_DIR}/server.mjs\"],
+  \"env\": {
+    \"PATH\": \"$(dirname "$NODE_REAL_PATH"):${PATH}\",
+    \"NODE_PATH\": \"$(dirname "$NODE_REAL_PATH")/../lib/node_modules\"
+  }
+}" -s user
         echo -e "${GREEN}✅ Claude MCP に登録しました${NC}"
+        echo "   Node.jsパス: ${NODE_REAL_PATH}"
+        echo -e "${YELLOW}⚠️  新しいClaude Codeセッションを開始してください${NC}"
     fi
 else
     echo -e "${YELLOW}⚠️  Claude CLI がインストールされていません${NC}"
     echo "後で以下のコマンドで登録してください:"
-    echo "claude mcp add devserver \"node ${INSTALL_DIR}/server.mjs\" -s user"
+    echo "claude mcp add devserver \"${NODE_PATH} ${INSTALL_DIR}/server.mjs\" -s user"
 fi
 
 # Claude Commandsのインストール
@@ -266,6 +339,17 @@ echo "  2. Claude Code で以下のコマンドを実行:"
 echo "     /mcp__devserver__up {}"
 echo "     /mcp__devserver__logs {\"label\":\"next\"}"
 echo "     /mcp__devserver__down {}"
+echo
+echo "🔧 Node.jsバージョン切り替え時の対応:"
+echo "  便利スクリプトで簡単に更新できます:"
+echo "  ${INSTALL_DIR}/scripts/update-mcp-registration.sh"
+echo ""
+echo "  または手動で："
+echo "  claude mcp remove devserver"
+echo "  claude mcp add devserver \"\$(which node) ${INSTALL_DIR}/server.mjs\" -s user"
+echo ""
+echo "🔍 互換性チェック:"
+echo "  ${INSTALL_DIR}/scripts/check-compatibility.sh"
 echo
 echo "📖 詳細なドキュメント:"
 echo "  https://github.com/yourusername/devserver-mcp"
